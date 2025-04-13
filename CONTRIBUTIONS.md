@@ -8,6 +8,7 @@
 - Separated total votes by parties and added final election results
 - Fixed and updated .gitignore file
 - Merged branches and resolved conflicts
+- Wrote the Data Scraping Midterm Report
 
 ## Nino Bendianishvili (NinoBendianishvili)
 - Developed state-based data analyzer (year-based WIP)
