@@ -1,22 +1,20 @@
-# main.py
 import time
-import os # Added for path joining
+import os
 from typing import List
 from scraper.collector import StateElectionScraper
 from models.data_models import Party, ElectionResult, StateData, YearData
-from utils.file_handler import save_to_csv, save_to_json # Import the new functions
+from utils.file_handler import save_to_csv, save_to_json 
 
-# --- Configuration ---
-TARGET_YEARS = [2020, 2016, 2012]  # Example target years
-SCRAPER_DELAY_SECONDS = 1.0
-OUTPUT_DIR = "output" # Define output directory
-CSV_FILENAME = "election_results.csv"
-JSON_FILENAME = "election_results.json"
+TARGET_YEARS = [2020, 2016, 2012, 2008, 2004, 2000]
+SCRAPER_DELAY_SECONDS = 0.7 
+OUTPUT_DIR = "output" 
+CSV_FILENAME = "election_results_combined.csv" 
+JSON_FILENAME = "election_results_combined.json"
 
 def run_test_scrape():
     """Runs the scraper, prints test output, and saves results to files."""
     print("-" * 30)
-    print("Starting Scraper Test...")
+    print("Starting Combined Scraper Run...")
     print("-" * 30)
 
     scraper = StateElectionScraper(
@@ -24,10 +22,8 @@ def run_test_scrape():
         delay_seconds=SCRAPER_DELAY_SECONDS
     )
 
-    # Run the full scrape process -> returns List[ElectionResult]
     all_results: List[ElectionResult] = scraper.scrape_all_states()
 
-    # --- Comprehensive Test Output ---
     print("\n" + "-" * 30)
     print("Test Output: Displaying all fields for first few results...")
     print("-" * 30)
@@ -36,44 +32,31 @@ def run_test_scrape():
         print("No results were collected.")
         return
 
-    results_to_show = 3 # Show fewer results to keep output manageable for testing
+    results_to_show = 2 
     count = 0
     for result in all_results:
         if count >= results_to_show:
             break
 
-        # Access data via the nested objects
-        state_name = result.state_info.state_name
-        state_ev = result.state_info.electoral_votes
-        state_pop = result.state_info.total_population
+        state_info = result.state_info
+        year_info = result.year_info
 
-        year = result.year_info.year
-        dem_leader = result.year_info.dem_leader
-        rep_leader = result.year_info.rep_leader
-        dem_votes = result.year_info.dem_votes
-        rep_votes = result.year_info.rep_votes
-        total_votes = result.year_info.total_votes
-
-        dem_pct = result.dem_percentage
-        rep_pct = result.rep_percentage
-        winner = result.winner.value if result.winner else 'N/A'
-
-        print(f"Result #{count + 1}:")
+        print(f"Result #{count + 1} ({state_info.state_name} - {year_info.year}):")
         print(f"  State Info:")
-        print(f"    Name: {state_name}")
-        print(f"    EV:   {state_ev if state_ev is not None else 'N/A'}")
-        print(f"    Pop:  {state_pop if state_pop is not None else 'N/A'}")
-        print(f"  Year Info:")
-        print(f"    Year: {year}")
-        print(f"    DEM Leader: {dem_leader if dem_leader else 'N/A'}")
-        print(f"    REP Leader: {rep_leader if rep_leader else 'N/A'}")
-        print(f"    DEM Votes: {dem_votes if dem_votes is not None else 'N/A'}")
-        print(f"    REP Votes: {rep_votes if rep_votes is not None else 'N/A'}")
-        print(f"    Total Votes: {total_votes if total_votes is not None else 'N/A'}")
-        print(f"  Percentages:")
-        print(f"    DEM %: {dem_pct if dem_pct is not None else 'N/A'}")
-        print(f"    REP %: {rep_pct if rep_pct is not None else 'N/A'}")
-        print(f"  Winner: {winner}")
+        print(f"    Name: {state_info.state_name}")
+        print(f"    EV:   {state_info.electoral_votes if state_info.electoral_votes is not None else 'N/A'}")
+        print(f"    Pop:  {state_info.total_population if state_info.total_population is not None else 'N/A'} (Expected N/A)") # Population not scraped
+        print(f"  Year Info (National):")
+        print(f"    Year: {year_info.year}")
+        print(f"    DEM Leader: {year_info.dem_leader if year_info.dem_leader else 'N/A'}")
+        print(f"    REP Leader: {year_info.rep_leader if year_info.rep_leader else 'N/A'}")
+        print(f"    DEM Nat Votes: {year_info.dem_votes if year_info.dem_votes is not None else 'N/A'}")
+        print(f"    REP Nat Votes: {year_info.rep_votes if year_info.rep_votes is not None else 'N/A'}")
+        print(f"    Total Nat Votes: {year_info.total_votes if year_info.total_votes is not None else 'N/A'} (Expected N/A)") # Total Nat votes not directly scraped
+        print(f"  State Election Details:")
+        print(f"    DEM State %: {result.dem_percentage if result.dem_percentage is not None else 'N/A'}")
+        print(f"    REP State %: {result.rep_percentage if result.rep_percentage is not None else 'N/A'}")
+        print(f"    State Winner: {result.winner.value if result.winner else 'N/A'}")
         print("-" * 20)
 
         count += 1
@@ -81,7 +64,6 @@ def run_test_scrape():
     if len(all_results) > results_to_show:
         print(f"... and {len(all_results) - results_to_show} more results collected.")
 
-    # --- Save results to files ---
     print("\n" + "-" * 30)
     print("Saving Results...")
     print("-" * 30)
@@ -91,12 +73,13 @@ def run_test_scrape():
     else:
         print("Skipping file saving as no results were collected.")
 
-
-# --- Main Execution ---
 if __name__ == "__main__":
     start_time = time.time()
     run_test_scrape()
     end_time = time.time()
     print(f"\nTotal execution time: {end_time - start_time:.2f} seconds.")
-    print("Note: Fields like Population, Leaders, Total Votes are likely 'N/A' as they aren't readily available on the scraped pages.")
-    print(f"Check the '{OUTPUT_DIR}' directory for CSV and JSON output files.")
+    print("\nNote:")
+    print("- National leader names and popular votes should now be populated for most target years.")
+    print("- State population and total national votes are generally 'N/A' as they aren't available/scraped.")
+    print("- State-level percentages and winners are parsed from individual state pages.")
+    print(f"- Check the '{OUTPUT_DIR}' directory for '{CSV_FILENAME}' and '{JSON_FILENAME}' output files.")

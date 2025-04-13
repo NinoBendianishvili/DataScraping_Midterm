@@ -1,6 +1,7 @@
 # models/data_models.py
-from typing import Optional, Dict
+from typing import Optional, Dict, Union
 from enum import Enum
+import re # Import re for cleaning vote strings
 
 class Party(Enum):
     DEMOCRATIC = "Democratic"
@@ -35,20 +36,21 @@ class StateData:
 
 class YearData:
     """
-    Holds information specific to a single election year: year, candidates, total votes.
+    Holds information specific to a single election year: year, candidates, national votes.
+    Note: dem_votes, rep_votes, total_votes here refer to NATIONAL totals.
     """
     def __init__(self,
                  year: int,
                  dem_leader: Optional[str] = None,
                  rep_leader: Optional[str] = None,
-                 dem_votes: Optional[int] = None,
-                 rep_votes: Optional[int] = None,
-                 total_votes: Optional[int] = None):
+                 dem_votes: Optional[int] = None, # National Popular Votes
+                 rep_votes: Optional[int] = None, # National Popular Votes
+                 total_votes: Optional[int] = None): # Potentially national total, often None
         """ Initializes year-specific data. """
         if not isinstance(year, int):
              raise TypeError(f"Election year must be an integer, got {type(year)}.")
         self.year: int = year
-        
+
         if dem_leader is not None and not isinstance(dem_leader, str):
             raise TypeError(f"Democratic leader must be a string, got {type(dem_leader)}.")
         self.dem_leader: Optional[str] = dem_leader
@@ -57,48 +59,67 @@ class YearData:
             raise TypeError(f"Republican leader must be a string, got {type(rep_leader)}.")
         self.rep_leader: Optional[str] = rep_leader
 
-        # Check and store votes
-        self.dem_votes: Optional[int] = self._check_votes(dem_votes, "Democratic")
-        self.rep_votes: Optional[int] = self._check_votes(rep_votes, "Republican")
-        self.total_votes: Optional[int] = self._check_votes(total_votes, "Total")
+        # Check and store votes (now handles strings with commas)
+        self.dem_votes: Optional[int] = self._check_votes(dem_votes, "Democratic National")
+        self.rep_votes: Optional[int] = self._check_votes(rep_votes, "Republican National")
+        self.total_votes: Optional[int] = self._check_votes(total_votes, "Total National") # Usually derived or None
 
-    def _check_votes(self, votes: Optional[int], vote_type: str) -> Optional[int]:
-        """ Check: votes should be an integer >= 0 (or None)."""
+    def _check_votes(self, votes: Optional[Union[int, str]], vote_type: str) -> Optional[int]:
+        """ Check: votes should be an integer >= 0 (or None), handles comma strings."""
         if votes is None:
             return None
-        if not isinstance(votes, int):
-             try:
-                if isinstance(votes, float) and votes.is_integer() and votes >= 0:
-                    return int(votes)
-                else:
-                    print(f"Warning ({self.year}): Expected integer >= 0 for {vote_type} votes, got {type(votes)} '{votes}'. Storing 'None'.")
-                    return None
-             except Exception:
-                 print(f"Warning ({self.year}): Could not process {vote_type} votes value '{votes}'. Storing 'None'.")
+
+        original_votes = votes # Keep for logging
+
+        if isinstance(votes, str):
+            # Clean the string: remove commas, whitespace
+            cleaned_votes = re.sub(r'[,\s]', '', votes)
+            if cleaned_votes.isdigit():
+                try:
+                    votes = int(cleaned_votes)
+                except ValueError:
+                     print(f"Warning ({self.year}): Could not convert cleaned string '{cleaned_votes}' to integer for {vote_type} votes. Original: '{original_votes}'. Storing 'None'.")
+                     return None
+            else:
+                 # Handle cases like 'N/A' or other non-numeric strings if necessary
+                 print(f"Warning ({self.year}): Non-numeric string value '{original_votes}' for {vote_type} votes. Storing 'None'.")
                  return None
+        elif isinstance(votes, float):
+             if votes.is_integer() and votes >= 0:
+                 votes = int(votes)
+             else:
+                 print(f"Warning ({self.year}): Non-integer float value '{original_votes}' for {vote_type} votes. Storing 'None'.")
+                 return None
+        elif not isinstance(votes, int):
+             print(f"Warning ({self.year}): Expected integer or parseable string for {vote_type} votes, got {type(original_votes)} '{original_votes}'. Storing 'None'.")
+             return None
+
+        # Final check after potential conversion
         if votes < 0:
-            print(f"Warning ({self.year}): {vote_type} votes '{votes}' is negative. Storing 'None'.")
+            print(f"Warning ({self.year}): {vote_type} votes '{votes}' is negative (Original: '{original_votes}'). Storing 'None'.")
             return None
+
         return votes
+
 
     def __repr__(self) -> str:
         """ Developer-friendly representation. """
         return (f"YearData(year={self.year}, "
                 f"DEM='{self.dem_leader}', REP='{self.rep_leader}', "
-                f"DEM_Votes={self.dem_votes}, REP_Votes={self.rep_votes}, "
-                f"TotalVotes={self.total_votes})")
+                f"DEM_Nat_Votes={self.dem_votes}, REP_Nat_Votes={self.rep_votes}, "
+                f"TotalNatVotes={self.total_votes})")
 
 class ElectionResult:
     """
-    Connects state information, year information, and the percentage results
-    for a specific election in that state and year.
+    Connects state information, year information (incl. national leaders/votes),
+    and the state-level percentage results for a specific election.
     """
     def __init__(self,
                  state_info: StateData,
                  year_info: YearData,
-                 dem_percentage: Optional[float] = None,
-                 rep_percentage: Optional[float] = None,
-                 winner: Optional[Party] = None):
+                 dem_percentage: Optional[float] = None, # State-level %
+                 rep_percentage: Optional[float] = None, # State-level %
+                 winner: Optional[Party] = None):       # State-level winner
         """ Initializes the election result link. """
         if not isinstance(state_info, StateData):
             raise TypeError(f"state_info must be an instance of StateData, got {type(state_info)}.")
@@ -108,9 +129,9 @@ class ElectionResult:
             raise TypeError(f"year_info must be an instance of YearData, got {type(year_info)}.")
         self.year_info: YearData = year_info
 
-        self.dem_percentage: Optional[float] = self._check_percentage(dem_percentage, "Democratic")
-        self.rep_percentage: Optional[float] = self._check_percentage(rep_percentage, "Republican")
-        self.winner: Optional[Party] = winner
+        self.dem_percentage: Optional[float] = self._check_percentage(dem_percentage, "Democratic (State)")
+        self.rep_percentage: Optional[float] = self._check_percentage(rep_percentage, "Republican (State)")
+        self.winner: Optional[Party] = winner # Assumes winner is validated elsewhere if needed
 
     def _check_percentage(self, percent: Optional[float], party_name: str) -> Optional[float]:
         """ Helper check: percentages should be numbers between 0 and 100. """
@@ -127,7 +148,7 @@ class ElectionResult:
         year = self.year_info.year if self.year_info else 'N/A'
         return (f"ElectionResult(State='{state_name}', Year={year}, "
                 f"DEM%={self.dem_percentage}, REP%={self.rep_percentage}, "
-                f"Winner={self.winner.value if self.winner else 'N/A'})")
+                f"StateWinner={self.winner.value if self.winner else 'N/A'})")
 
     # Properties to access underlying data easily
     @property
