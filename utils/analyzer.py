@@ -1,38 +1,28 @@
-# utils/analyzer.py
 import pandas as pd
 import os
 import plotly.express as px
-# No longer need go for maps
-# import plotly.graph_objects as go
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from typing import List, Dict, Union, Optional
 import logging
 
-# --- Basic Logging Setup ---
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- Configuration ---
 INPUT_CSV_DIR = "output"
 INPUT_CSV_FILENAME = "election_results_combined.csv"
 OUTPUT_DIR = "analysis_report"
 OUTPUT_BAR_CHART_HTML_FILENAME = "election_analysis_report.html"
-# Change map report filename
 OUTPUT_STATIC_MAPS_HTML_FILENAME = "election_static_maps_report.html"
 TEMPLATE_DIR = "utils"
 BAR_CHART_TEMPLATE_NAME = "report_template.html"
-# Change map template name
 STATIC_MAPS_TEMPLATE_NAME = "map_report_template.html"
 
-# --- Simplified Color Mapping (adjust if 'Other' is possible) ---
 PARTY_COLORS = {
     'Democratic': 'blue',
     'Republican': 'red'
-    # Add 'Other': 'grey' if needed based on your actual data possibilities
 }
 
-# --- Column Name Constants ---
 DEM_NAT_VOTE_COL = 'dem_national_votes'
 REP_NAT_VOTE_COL = 'rep_national_votes'
 DEM_STATE_PCT_COL = 'dem_state_percentage'
@@ -43,9 +33,6 @@ YEAR_COL = 'year'
 STATE_NAME_COL = 'state_name'
 WINNER_COL = 'state_winner'
 
-
-# --- load_data, create_national_plot, create_state_plot, generate_bar_chart_html_report ---
-# --- (Keep these functions exactly as they were in the previous correct version) ---
 def load_data(filepath: str) -> Optional[pd.DataFrame]:
     logger.info(f"Attempting to load data from: {filepath}")
     if not os.path.exists(filepath):
@@ -71,7 +58,6 @@ def load_data(filepath: str) -> Optional[pd.DataFrame]:
         for col in numeric_cols:
             if col in df.columns:
                 original_dtype = df[col].dtype
-                # Convert using pd.to_numeric, coercing errors to NaN
                 df[col] = pd.to_numeric(df[col], errors='coerce')
                 if df[col].isnull().any():
                      logger.warning(f"Column '{col}' contained non-numeric values -> NaN. Original type: {original_dtype}")
@@ -84,37 +70,26 @@ def load_data(filepath: str) -> Optional[pd.DataFrame]:
         if rows_before_drop > rows_after_drop:
              logger.warning(f"Dropped {rows_before_drop - rows_after_drop} rows due to missing national vote data.")
 
-        # Clean winner column
         df[WINNER_COL] = df[WINNER_COL].astype(str).str.strip()
         logger.info(f"Unique raw values in '{WINNER_COL}' before cleaning None/NA: {df[WINNER_COL].unique()}")
         df[WINNER_COL] = df[WINNER_COL].replace({'nan': None, '': None, 'N/A': None})
-        # Drop rows if winner is None/NA after cleaning
         df.dropna(subset=[WINNER_COL], inplace=True)
         logger.info(f"Unique values in '{WINNER_COL}' after cleaning None/NA and dropping: {df[WINNER_COL].dropna().unique()}") # Use dropna() for unique
-
-        # Filter to only expected winners
         valid_winners = list(PARTY_COLORS.keys())
         initial_rows = len(df)
         df = df[df[WINNER_COL].isin(valid_winners)].copy() # Use .copy() for explicit copy
         if len(df) < initial_rows:
              removed_count = initial_rows - len(df)
              logger.warning(f"Removed {removed_count} rows with unexpected winner values not in {valid_winners}.")
-             # Find out which ones were removed (optional debug)
-             # removed_winners = initial_df[~initial_df.index.isin(df.index)][WINNER_COL].unique()
-             # logger.debug(f"Winners removed: {removed_winners}")
 
-
-        # Clean leader columns
         df[DEM_LEADER_COL] = df[DEM_LEADER_COL].fillna('N/A').astype(str).str.strip()
         df[REP_LEADER_COL] = df[REP_LEADER_COL].fillna('N/A').astype(str).str.strip()
 
-        # Convert year column
         df[YEAR_COL] = pd.to_numeric(df[YEAR_COL], errors='coerce').astype('Int64')
         if df[YEAR_COL].isnull().any():
              logger.warning("Found missing or non-numeric values in 'year' column. Rows with invalid years will be excluded.")
              df.dropna(subset=[YEAR_COL], inplace=True)
 
-        # Ensure state name is clean
         df[STATE_NAME_COL] = df[STATE_NAME_COL].astype(str).str.strip()
         df.dropna(subset=[STATE_NAME_COL], inplace=True) # Drop if state name is missing
 
@@ -136,10 +111,8 @@ def create_national_plot(df: pd.DataFrame) -> Optional[str]:
         return "<p>No data available for national plot.</p>"
     try:
         vote_cols = [DEM_NAT_VOTE_COL, REP_NAT_VOTE_COL]
-        # Ensure consistent national votes per year (using first() assumes data is clean per year)
         national_votes = df.groupby(YEAR_COL)[vote_cols].first().reset_index()
 
-        # Convert to numeric just in case they were loaded as objects
         national_votes[DEM_NAT_VOTE_COL] = pd.to_numeric(national_votes[DEM_NAT_VOTE_COL], errors='coerce')
         national_votes[REP_NAT_VOTE_COL] = pd.to_numeric(national_votes[REP_NAT_VOTE_COL], errors='coerce')
         national_votes.dropna(subset=vote_cols, inplace=True) # Drop if conversion failed
@@ -158,7 +131,6 @@ def create_national_plot(df: pd.DataFrame) -> Optional[str]:
             id_vars=[YEAR_COL], value_vars=['Democratic (%)', 'Republican (%)'],
             var_name='Party', value_name='Percentage'
         )
-        # Ensure 'Party' column does not contain the '(%)' part for color mapping
         plot_data['Party'] = plot_data['Party'].str.replace(r' \(\%\)', '', regex=True)
 
         fig = px.bar(
@@ -170,7 +142,6 @@ def create_national_plot(df: pd.DataFrame) -> Optional[str]:
         )
         fig.update_layout(yaxis_range=[0, 100])
         fig.update_traces(textposition='outside')
-        # Important: Include JS CDN only for the *first* plot in the combined bar chart report
         plot_div = fig.to_html(full_html=False, include_plotlyjs='cdn')
         logger.info("National trends bar chart created successfully.")
         return plot_div
@@ -193,29 +164,24 @@ def create_state_plot(state_df: pd.DataFrame, state_name: str) -> Optional[str]:
     try:
         state_plot_data = state_df[[YEAR_COL] + pct_cols].copy()
 
-        # Convert percentages to numeric, coercing errors
         state_plot_data[DEM_STATE_PCT_COL] = pd.to_numeric(state_plot_data[DEM_STATE_PCT_COL], errors='coerce')
         state_plot_data[REP_STATE_PCT_COL] = pd.to_numeric(state_plot_data[REP_STATE_PCT_COL], errors='coerce')
 
-        # Rename columns for clarity in melt
         state_plot_data.rename(columns={
             DEM_STATE_PCT_COL: 'Democratic', REP_STATE_PCT_COL: 'Republican'
         }, inplace=True)
 
-        # Drop rows where *both* percentages are NaN after conversion/coercion
         state_plot_data.dropna(subset=['Democratic', 'Republican'], how='all', inplace=True)
 
         if state_plot_data.empty:
             logger.warning(f"No valid percentage data rows to plot for state bar chart: {state_name} after dropping NaNs.")
             return f"<p>No graphable percentage data available for {state_name} bar chart.</p>"
 
-        # Melt the DataFrame
         state_plot_data = state_plot_data.melt(
             id_vars=[YEAR_COL], value_vars=['Democratic', 'Republican'],
             var_name='Party', value_name='Percentage'
         )
 
-        # Ensure Percentage is numeric for plotting
         state_plot_data['Percentage'] = pd.to_numeric(state_plot_data['Percentage'], errors='coerce')
         # Optional: Drop rows if percentage became NaN during melt/conversion (shouldn't happen often)
         state_plot_data.dropna(subset=['Percentage'], inplace=True)
@@ -233,7 +199,6 @@ def create_state_plot(state_df: pd.DataFrame, state_name: str) -> Optional[str]:
         )
         fig.update_layout(yaxis_range=[0, 100])
         fig.update_traces(textposition='outside')
-        # Set include_plotlyjs=False for subsequent plots in the same HTML report
         plot_div = fig.to_html(full_html=False, include_plotlyjs=False)
         logger.debug(f"Bar chart created successfully for state: {state_name}")
         return plot_div
@@ -250,11 +215,9 @@ def generate_bar_chart_html_report(national_plot_div: Optional[str], state_plot_
         template = env.get_template(BAR_CHART_TEMPLATE_NAME) # Assumes bar chart template still exists
         logger.info(f"Loaded Jinja template: {BAR_CHART_TEMPLATE_NAME}")
         years_str = f"{min(years)} - {max(years)}" if years else "N/A"
-        # Provide default message if plot generation failed
         national_plot_html = national_plot_div if national_plot_div and "<p>" not in national_plot_div else \
                              "<p>National bar chart could not be generated. Check logs and input data.</p>"
 
-        # Filter out failed state plots before passing to template
         valid_state_plots = {k: v for k, v in state_plot_divs.items() if v and "<p>" not in v}
         if len(valid_state_plots) < len(state_plot_divs):
             logger.warning(f"Excluded {len(state_plot_divs) - len(valid_state_plots)} state bar charts due to generation errors.")
@@ -275,7 +238,6 @@ def generate_bar_chart_html_report(national_plot_div: Optional[str], state_plot_
         logger.error(f"Failed to generate bar chart HTML report: {e}", exc_info=True)
 
 
-# === NEW Function for Static Map Report ===
 
 def create_static_map(df_year: pd.DataFrame, year: int, include_js: bool = False) -> Optional[str]:
     """Creates a static Plotly choropleth map for a single election year."""
@@ -287,7 +249,6 @@ def create_static_map(df_year: pd.DataFrame, year: int, include_js: bool = False
         logger.error(f"Year {year} DataFrame empty or missing required columns for map: {missing}")
         return f"<p>No or incomplete data for map in year {year}. Missing: {missing}</p>"
 
-    # Ensure winner column is clean and filtered for this specific year's data
     df_year = df_year.copy() # Avoid SettingWithCopyWarning
     df_year[WINNER_COL] = df_year[WINNER_COL].astype(str).str.strip()
     valid_winners = list(PARTY_COLORS.keys())
@@ -324,7 +285,6 @@ def create_static_map(df_year: pd.DataFrame, year: int, include_js: bool = False
             legend_title_text='State Winner'
         )
 
-        # Control Plotly JS inclusion based on the flag
         plot_div = fig.to_html(full_html=False, include_plotlyjs=include_js)
 
         logger.info(f"Static map created successfully for year: {year}")
@@ -344,7 +304,6 @@ def generate_static_maps_report(map_divs: Dict[int, str], years: List[int], outp
 
     try:
         env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=select_autoescape(['html', 'xml']))
-        # Use the new template name
         template = env.get_template(STATIC_MAPS_TEMPLATE_NAME)
         logger.info(f"Loaded Jinja template: {STATIC_MAPS_TEMPLATE_NAME}")
 
@@ -367,21 +326,17 @@ def generate_static_maps_report(map_divs: Dict[int, str], years: List[int], outp
         logger.error(f"Failed to generate static maps HTML report: {e}", exc_info=True)
 
 
-# === Main Execution (Modified) ===
 if __name__ == "__main__":
     logger.info("="*30)
     logger.info("Starting Election Analysis Script (Bar Charts & Static Maps)")
     logger.info("="*30)
     input_csv_path = os.path.abspath(os.path.join(INPUT_CSV_DIR, INPUT_CSV_FILENAME))
     output_bar_chart_html_path = os.path.abspath(os.path.join(OUTPUT_DIR, OUTPUT_BAR_CHART_HTML_FILENAME))
-    # Use new map report path
     output_static_maps_html_path = os.path.abspath(os.path.join(OUTPUT_DIR, OUTPUT_STATIC_MAPS_HTML_FILENAME))
     template_dir_path = os.path.abspath(TEMPLATE_DIR)
     bar_template_path = os.path.join(template_dir_path, BAR_CHART_TEMPLATE_NAME)
-    # Use new map template path
     static_maps_template_path = os.path.join(template_dir_path, STATIC_MAPS_TEMPLATE_NAME)
 
-    # Ensure output directory exists
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     logger.info(f"Output directory: {os.path.abspath(OUTPUT_DIR)}")
     logger.info(f"Input CSV path: {input_csv_path}")
@@ -403,12 +358,10 @@ if __name__ == "__main__":
         df_loaded = load_data(input_csv_path)
 
         if df_loaded is not None and not df_loaded.empty:
-            # Ensure year column is integer type for processing
             df_loaded[YEAR_COL] = df_loaded[YEAR_COL].astype(int)
             analyzed_years = sorted(df_loaded[YEAR_COL].unique().tolist())
             logger.info(f"Years found in cleaned data: {analyzed_years}")
 
-            # --- Generate Bar Chart Report (No Change) ---
             logger.info("-" * 20 + " Generating Bar Chart Report " + "-" * 20)
             national_bar_div = create_national_plot(df_loaded.copy())
             state_bar_divs = {}
@@ -428,10 +381,8 @@ if __name__ == "__main__":
                 logger.error(f"Column '{STATE_NAME_COL}' not found. Skipping state bar charts.")
             generate_bar_chart_html_report(national_bar_div, state_bar_divs, analyzed_years, output_bar_chart_html_path)
 
-            # --- Generate Static Maps Report ---
             logger.info("-" * 20 + " Generating Static Maps Report " + "-" * 20)
             static_map_divs = {}
-            # Include JS only for the first map generated
             include_js_for_map = True
             for year in analyzed_years:
                 df_year = df_loaded[df_loaded[YEAR_COL] == year].copy()
@@ -440,14 +391,12 @@ if __name__ == "__main__":
                     static_map_divs[year] = map_div
                     include_js_for_map = False # Don't include JS for subsequent maps
 
-            # Generate the report using the collected map divs
             generate_static_maps_report(static_map_divs, analyzed_years, output_static_maps_html_path)
 
         elif df_loaded is None:
             logger.error("Analysis stopped: Data loading failed.")
         else: # df_loaded is not None but is empty
              logger.error("Analysis stopped: Data loaded but resulted in an empty DataFrame after cleaning/filtering.")
-             # Optionally generate empty reports
              generate_bar_chart_html_report(None, {}, [], output_bar_chart_html_path)
              generate_static_maps_report({}, [], output_static_maps_html_path)
 
