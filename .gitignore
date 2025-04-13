@@ -1,4 +1,2 @@
-/output
-models/__pycache__
-scraper/__pycache__
-utils/__pycache__
+output/
+__pycache__/
