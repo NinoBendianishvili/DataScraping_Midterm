@@ -1,15 +1,20 @@
 # main.py
 import time
+import os # Added for path joining
 from typing import List
 from scraper.collector import StateElectionScraper
 from models.data_models import Party, ElectionResult, StateData, YearData
+from utils.file_handler import save_to_csv, save_to_json # Import the new functions
 
 # --- Configuration ---
 TARGET_YEARS = [2020, 2016, 2012]  # Example target years
 SCRAPER_DELAY_SECONDS = 1.0
+OUTPUT_DIR = "output" # Define output directory
+CSV_FILENAME = "election_results.csv"
+JSON_FILENAME = "election_results.json"
 
 def run_test_scrape():
-    """Runs the scraper and prints test output for all model fields."""
+    """Runs the scraper, prints test output, and saves results to files."""
     print("-" * 30)
     print("Starting Scraper Test...")
     print("-" * 30)
@@ -31,7 +36,7 @@ def run_test_scrape():
         print("No results were collected.")
         return
 
-    results_to_show = 5  # Show fewer results to keep output manageable
+    results_to_show = 3 # Show fewer results to keep output manageable for testing
     count = 0
     for result in all_results:
         if count >= results_to_show:
@@ -76,6 +81,17 @@ def run_test_scrape():
     if len(all_results) > results_to_show:
         print(f"... and {len(all_results) - results_to_show} more results collected.")
 
+    # --- Save results to files ---
+    print("\n" + "-" * 30)
+    print("Saving Results...")
+    print("-" * 30)
+    if all_results:
+        save_to_csv(all_results, CSV_FILENAME, OUTPUT_DIR)
+        save_to_json(all_results, JSON_FILENAME, OUTPUT_DIR)
+    else:
+        print("Skipping file saving as no results were collected.")
+
+
 # --- Main Execution ---
 if __name__ == "__main__":
     start_time = time.time()
@@ -83,3 +99,4 @@ if __name__ == "__main__":
     end_time = time.time()
     print(f"\nTotal execution time: {end_time - start_time:.2f} seconds.")
     print("Note: Fields like Population, Leaders, Total Votes are likely 'N/A' as they aren't readily available on the scraped pages.")
+    print(f"Check the '{OUTPUT_DIR}' directory for CSV and JSON output files.")
