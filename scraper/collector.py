@@ -36,17 +36,30 @@ class StateElectionScraper:
             print(f"  Fetching national data for {year}...")
             year_results = scrape_election_year(year) 
             if year_results:
-                year_entry = {'dem_leader': None, 'rep_leader': None, 'dem_votes': None, 'rep_votes': None}
+                year_entry = {
+                    'dem_leader': None, 
+                    'rep_leader': None, 
+                    'dem_votes': None, 
+                    'rep_votes': None,
+                    'winner_image_url': None
+                }
                 for candidate_data in year_results:
                     party = candidate_data.get("party")
                     leader = candidate_data.get("leader")
                     pop_votes = candidate_data.get("popular_votes")
+                    winner_image_url = candidate_data.get("winner_image_url")
+                    
                     if party == "Democratic":
                         year_entry['dem_leader'] = leader
                         year_entry['dem_votes'] = pop_votes 
+                        if winner_image_url:
+                            year_entry['winner_image_url'] = winner_image_url
                     elif party == "Republican":
                         year_entry['rep_leader'] = leader
                         year_entry['rep_votes'] = pop_votes 
+                        if winner_image_url:
+                            year_entry['winner_image_url'] = winner_image_url
+                            
                 self.national_year_data[year] = year_entry
                 print(f"    -> Stored national data for {year}.")
             else:
@@ -109,7 +122,8 @@ class StateElectionScraper:
                         rep_leader=national_data.get('rep_leader'),
                         dem_votes=national_data.get('dem_votes'),
                         rep_votes=national_data.get('rep_votes'),
-                        total_votes=None
+                        total_votes=None,
+                        winner_image_url=national_data.get('winner_image_url')
                     )
                     year_obj_cache[year] = year_obj
                 else:

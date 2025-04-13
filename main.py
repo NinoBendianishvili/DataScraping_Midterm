@@ -1,3 +1,4 @@
+# main.py
 import time
 import os
 from typing import List
@@ -44,3 +45,4 @@ if __name__ == "__main__":
     print(f"\nTotal execution time: {end_time - start_time:.2f} seconds.")
     print("\nNote:")
     print(f"- Check the '{OUTPUT_DIR}' directory for '{CSV_FILENAME}' and '{JSON_FILENAME}' output files.")
+    print("- Run 'analyzer.py' to generate visual reports from the collected data.")

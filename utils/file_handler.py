@@ -1,3 +1,4 @@
+# utils/file_handler.py
 import csv
 import json
 import os
@@ -28,7 +29,7 @@ def save_to_csv(results: List[ElectionResult], filename: str = "election_results
     header = [
         'state_name', 'electoral_votes', 'total_population', 
         'year', 'dem_leader', 'rep_leader', 'dem_national_votes', 'rep_national_votes', 'total_national_votes',
-        'dem_state_percentage', 'rep_state_percentage', 'state_winner' 
+        'dem_state_percentage', 'rep_state_percentage', 'state_winner', 'winner_image_url'
     ]
 
     try:
@@ -52,7 +53,8 @@ def save_to_csv(results: List[ElectionResult], filename: str = "election_results
                     year_info.total_votes if year_info.total_votes is not None else '', 
                     result.dem_percentage if result.dem_percentage is not None else '', 
                     result.rep_percentage if result.rep_percentage is not None else '',
-                    result.winner.value if result.winner else ''
+                    result.winner.value if result.winner else '',
+                    year_info.winner_image_url if year_info.winner_image_url else ''
                 ]
                 writer.writerow(row)
         print(f"Successfully saved {len(results)} results to {filepath}")
@@ -76,7 +78,8 @@ def _convert_result_to_dict(result: ElectionResult) -> Dict[str, Any]:
             "rep_leader": result.year_info.rep_leader,
             "dem_national_votes": result.year_info.dem_votes,
             "rep_national_votes": result.year_info.rep_votes,
-            "total_national_votes": result.year_info.total_votes 
+            "total_national_votes": result.year_info.total_votes,
+            "winner_image_url": result.year_info.winner_image_url
         },
         "state_election_details": {
             "dem_state_percentage": result.dem_percentage,

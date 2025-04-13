@@ -1,4 +1,3 @@
-# models/data_models.py
 from typing import Optional, Dict, Union
 from enum import Enum
 import re # Import re for cleaning vote strings
@@ -45,7 +44,8 @@ class YearData:
                  rep_leader: Optional[str] = None,
                  dem_votes: Optional[int] = None, # National Popular Votes
                  rep_votes: Optional[int] = None, # National Popular Votes
-                 total_votes: Optional[int] = None): # Potentially national total, often None
+                 total_votes: Optional[int] = None, # Potentially national total
+                 winner_image_url: Optional[str] = None): # URL of winner's image
         """ Initializes year-specific data. """
         if not isinstance(year, int):
              raise TypeError(f"Election year must be an integer, got {type(year)}.")
@@ -58,6 +58,10 @@ class YearData:
         if rep_leader is not None and not isinstance(rep_leader, str):
             raise TypeError(f"Republican leader must be a string, got {type(rep_leader)}.")
         self.rep_leader: Optional[str] = rep_leader
+
+        if winner_image_url is not None and not isinstance(winner_image_url, str):
+            raise TypeError(f"Winner image URL must be a string, got {type(winner_image_url)}.")
+        self.winner_image_url: Optional[str] = winner_image_url
 
         # Check and store votes (now handles strings with commas)
         self.dem_votes: Optional[int] = self._check_votes(dem_votes, "Democratic National")
@@ -107,7 +111,8 @@ class YearData:
         return (f"YearData(year={self.year}, "
                 f"DEM='{self.dem_leader}', REP='{self.rep_leader}', "
                 f"DEM_Nat_Votes={self.dem_votes}, REP_Nat_Votes={self.rep_votes}, "
-                f"TotalNatVotes={self.total_votes})")
+                f"TotalNatVotes={self.total_votes}, "
+                f"WinnerImageURL={self.winner_image_url})")
 
 class ElectionResult:
     """

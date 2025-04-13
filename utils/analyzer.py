@@ -1,3 +1,4 @@
+# analyzer.py
 import pandas as pd
 import os
 import plotly.express as px
@@ -32,6 +33,7 @@ REP_LEADER_COL = 'rep_leader'
 YEAR_COL = 'year'
 STATE_NAME_COL = 'state_name'
 WINNER_COL = 'state_winner'
+WINNER_IMAGE_COL = 'winner_image_url'
 
 def load_data(filepath: str) -> Optional[pd.DataFrame]:
     logger.info(f"Attempting to load data from: {filepath}")
@@ -46,7 +48,7 @@ def load_data(filepath: str) -> Optional[pd.DataFrame]:
         required_cols = [
             YEAR_COL, DEM_NAT_VOTE_COL, REP_NAT_VOTE_COL,
             STATE_NAME_COL, DEM_STATE_PCT_COL, REP_STATE_PCT_COL, WINNER_COL,
-            DEM_LEADER_COL, REP_LEADER_COL
+            DEM_LEADER_COL, REP_LEADER_COL, WINNER_IMAGE_COL
         ]
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
@@ -84,6 +86,7 @@ def load_data(filepath: str) -> Optional[pd.DataFrame]:
 
         df[DEM_LEADER_COL] = df[DEM_LEADER_COL].fillna('N/A').astype(str).str.strip()
         df[REP_LEADER_COL] = df[REP_LEADER_COL].fillna('N/A').astype(str).str.strip()
+        df[WINNER_IMAGE_COL] = df[WINNER_IMAGE_COL].fillna('').astype(str).str.strip()
 
         df[YEAR_COL] = pd.to_numeric(df[YEAR_COL], errors='coerce').astype('Int64')
         if df[YEAR_COL].isnull().any():
@@ -158,7 +161,8 @@ def create_state_plot(state_df: pd.DataFrame, state_name: str) -> Optional[str]:
 
     pct_cols = [DEM_STATE_PCT_COL, REP_STATE_PCT_COL]
     if not all(col in state_df.columns for col in pct_cols):
-        logger.error(f"Missing state percentage columns for state bar chart ({state_name}): {pct_cols}")
+        missing = [col for col in pct_cols if col not in state_df.columns]
+        logger.error(f"Missing state percentage columns for state bar chart ({state_name}): {missing}")
         return f"<p>Missing data columns for {state_name} bar chart.</p>"
 
     try:
@@ -243,7 +247,7 @@ def create_static_map(df_year: pd.DataFrame, year: int, include_js: bool = False
     """Creates a static Plotly choropleth map for a single election year."""
     logger.info(f"Generating static map for year: {year}...")
 
-    map_cols = [STATE_NAME_COL, WINNER_COL, DEM_LEADER_COL, REP_LEADER_COL]
+    map_cols = [STATE_NAME_COL, WINNER_COL, DEM_LEADER_COL, REP_LEADER_COL, WINNER_IMAGE_COL]
     if df_year.empty or not all(col in df_year.columns for col in map_cols):
         missing = [col for col in map_cols if col not in df_year.columns]
         logger.error(f"Year {year} DataFrame empty or missing required columns for map: {missing}")
@@ -266,13 +270,13 @@ def create_static_map(df_year: pd.DataFrame, year: int, include_js: bool = False
             df_year,
             locations=STATE_NAME_COL,
             locationmode='USA-states',
-            color=WINNER_COL,               # Column with 'Democratic', 'Republican'
-            hover_name=STATE_NAME_COL,      # Show state name bold in hover
-            hover_data={                    # Define extra hover data
-                WINNER_COL: True,           # Show winner party (already used for color)
-                DEM_LEADER_COL: True,       # Show Dem candidate
-                REP_LEADER_COL: True,       # Show Rep candidate
-                # Add others if needed, e.g., formatted votes (requires pre-formatting)
+            color=WINNER_COL,
+            hover_name=STATE_NAME_COL,
+            hover_data={
+                WINNER_COL: True,
+                DEM_LEADER_COL: True,
+                REP_LEADER_COL: True,
+                WINNER_IMAGE_COL: True
             },
             color_discrete_map=PARTY_COLORS, # Map Dem/Rep strings to blue/red
             scope='usa',
@@ -294,6 +298,36 @@ def create_static_map(df_year: pd.DataFrame, year: int, include_js: bool = False
         logger.error(f"Failed to create static map for year {year}: {e}", exc_info=True)
         return f"<p>An error occurred generating the map for {year}.</p>"
 
+def generate_bar_chart_html_report(national_plot_div: Optional[str], state_plot_divs: Dict[str, str], years: List[int], output_path: str):
+    logger.info(f"Generating bar chart HTML report to: {output_path}")
+    if not national_plot_div and not state_plot_divs:
+         logger.warning("Both national and state bar chart data are missing. Bar chart HTML report will be mostly empty.")
+    try:
+        env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=select_autoescape(['html', 'xml']))
+        template = env.get_template(BAR_CHART_TEMPLATE_NAME)
+        logger.info(f"Loaded Jinja template: {BAR_CHART_TEMPLATE_NAME}")
+        years_str = f"{min(years)} - {max(years)}" if years else "N/A"
+        national_plot_html = national_plot_div if national_plot_div and "<p>" not in national_plot_div else \
+                             "<p>National bar chart could not be generated. Check logs and input data.</p>"
+
+        valid_state_plots = {k: v for k, v in state_plot_divs.items() if v and "<p>" not in v}
+        if len(valid_state_plots) < len(state_plot_divs):
+            logger.warning(f"Excluded {len(state_plot_divs) - len(valid_state_plots)} state bar charts due to generation errors.")
+
+        context = {
+            'national_plot_div': national_plot_html,
+            'state_plot_divs': valid_state_plots,
+            'years_analyzed': years_str
+        }
+        logger.debug("Context prepared for bar chart Jinja template.")
+        html_content = template.render(context)
+        logger.info("Bar chart HTML template rendered successfully.")
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        logger.info(f"Bar chart HTML report successfully generated and saved at: {output_path}")
+    except Exception as e:
+        logger.error(f"Failed to generate bar chart HTML report: {e}", exc_info=True)
 
 def generate_static_maps_report(map_divs: Dict[int, str], years: List[int], output_path: str):
     """Generates an HTML report containing multiple static maps."""
@@ -404,3 +438,4 @@ if __name__ == "__main__":
     logger.info("="*30)
     logger.info("Election analysis finished.")
     logger.info("="*30)
+    
