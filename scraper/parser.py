@@ -8,19 +8,18 @@ from models.data_models import Party
 
 # --- Fetching & Basic Parsing ---
 
-def fetch_and_parse(url: str, session: requests.Session, delay_seconds: float = 1.0) -> Optional[BeautifulSoup]:
-    """ Fetches URL, applies delay, returns BeautifulSoup object. Handles errors. """
+def fetch_and_parse(url: str, session: requests.Session, delay_seconds: float = 0.5) -> Optional[BeautifulSoup]:
+    """Optimized fetch function with timeout handling"""
     try:
         time.sleep(delay_seconds)
-        response = session.get(url, timeout=15)
+        response = session.get(url, timeout=10)  # Reduced timeout
         response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'lxml')
-        return soup
+        return BeautifulSoup(response.content, 'lxml')
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching URL {url}: {e}")
+        print(f"Error fetching URL {url}: {str(e)[:100]}...")  # Truncate long error messages
         return None
     except Exception as e:
-        print(f"Error parsing URL {url}: {e}")
+        print(f"Error parsing URL {url}: {str(e)[:100]}...")
         return None
 
 # --- Specific Data Extraction Functions ---

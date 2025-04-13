@@ -1,12 +1,10 @@
 # scraper/collector.py
 import requests
 from typing import List, Optional, Dict, Any
-
-# Import parser functions and data models
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from .parser import (fetch_and_parse, parse_state_links,
-                    parse_state_details, parse_election_results_table) # Updated import
-from models.data_models import StateData, YearData, ElectionResult
-from models.data_models import Party
+                    parse_state_details, parse_election_results_table)
+from models.data_models import StateData, YearData, ElectionResult, Party
 
 class StateElectionScraper:
     """
@@ -16,14 +14,16 @@ class StateElectionScraper:
     BASE_URL = "https://www.270towin.com"
     STATES_LIST_URL = f"{BASE_URL}/states/"
     DEFAULT_TARGET_YEARS = [2020, 2016, 2012, 2008, 2004, 2000, 1996, 1992]
+    MAX_WORKERS = 5  # Number of concurrent requests
 
-    def __init__(self, target_years: Optional[List[int]] = None, delay_seconds: float = 1.0):
-        """ Initializes scraper session and target years. """
+    def __init__(self, target_years: Optional[List[int]] = None, delay_seconds: float = 0.5):  # Reduced delay
         self.target_years = target_years if target_years else self.DEFAULT_TARGET_YEARS
         self.delay_seconds = delay_seconds
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive'
         })
         print(f"Initialized scraper for years: {self.target_years} with delay {self.delay_seconds}s.")
 
@@ -58,12 +58,12 @@ class StateElectionScraper:
         try:
             state_obj = StateData(
                 state_name=state_name,
-                electoral_votes=electoral_votes,
-                total_population=total_population # Pass population (likely None)
+                electoral_votes=state_details.get('electoral_votes'),
+                total_population=state_details.get('total_population')
             )
         except (ValueError, TypeError) as e:
-             print(f"  Error creating StateData for {state_name}: {e}. Skipping state.")
-             return results_for_state
+            print(f"  Error creating StateData for {state_name}: {e}. Skipping state.")
+            return results_for_state
 
         # 3. Parse yearly results (Year, Leaders attempt, Pcts, Total Votes attempt)
         parsed_yearly_data = parse_election_results_table(soup, self.target_years)
@@ -74,34 +74,25 @@ class StateElectionScraper:
 
         for year_data_dict in parsed_yearly_data:
             year = year_data_dict.get('year')
-            if year is None: continue
-
-            # Get all available data
-            dem_leader = year_data_dict.get('dem_leader')
-            rep_leader = year_data_dict.get('rep_leader')
-            dem_pct = year_data_dict.get('dem_pct')
-            rep_pct = year_data_dict.get('rep_pct')
-            dem_votes = year_data_dict.get('dem_votes')
-            rep_votes = year_data_dict.get('rep_votes')
-            total_votes = year_data_dict.get('total_votes')
-            winner = year_data_dict.get('winner')
+            if year is None:
+                continue
 
             try:
                 year_obj = YearData(
                     year=year,
-                    dem_leader=dem_leader,
-                    rep_leader=rep_leader,
-                    dem_votes=dem_votes,
-                    rep_votes=rep_votes,
-                    total_votes=total_votes
+                    dem_leader=year_data_dict.get('dem_leader'),
+                    rep_leader=year_data_dict.get('rep_leader'),
+                    dem_votes=year_data_dict.get('dem_votes'),
+                    rep_votes=year_data_dict.get('rep_votes'),
+                    total_votes=year_data_dict.get('total_votes')
                 )
 
                 result_obj = ElectionResult(
                     state_info=state_obj,
                     year_info=year_obj,
-                    dem_percentage=dem_pct,
-                    rep_percentage=rep_pct,
-                    winner=winner
+                    dem_percentage=year_data_dict.get('dem_pct'),
+                    rep_percentage=year_data_dict.get('rep_pct'),
+                    winner=year_data_dict.get('winner')
                 )
                 results_for_state.append(result_obj)
             except (ValueError, TypeError) as e:
@@ -109,24 +100,32 @@ class StateElectionScraper:
                 continue
 
         return results_for_state
+
     def scrape_all_states(self) -> List[ElectionResult]:
         """ Orchestrates scraping all states, returns list of ElectionResult objects. """
         all_election_results: List[ElectionResult] = []
         state_links = self.get_state_links_and_names()
-        if not state_links: return all_election_results
+        if not state_links:
+            return all_election_results
 
         print(f"\nStarting scrape for {len(state_links)} states...")
-        count = 0
-        total = len(state_links)
-        for state_name, state_url_path in state_links.items():
-            count += 1
-            print(f"\n[{count}/{total}] Processing: {state_name}")
-            state_results = self.scrape_single_state(state_name, state_url_path)
-            if state_results:
-                all_election_results.extend(state_results)
-                print(f"  Added {len(state_results)} results for {state_name}.")
-            else:
-                 print(f"  No results added for {state_name}.")
+        
+        # Use ThreadPoolExecutor for concurrent requests
+        with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(self.scrape_single_state, state_name, state_url_path): state_name
+                for state_name, state_url_path in state_links.items()
+            }
+            
+            for future in as_completed(futures):
+                state_name = futures[future]
+                try:
+                    state_results = future.result()
+                    if state_results:
+                        all_election_results.extend(state_results)
+                        print(f"  Added {len(state_results)} results for {state_name}.")
+                except Exception as e:
+                    print(f"  Error processing {state_name}: {e}")
 
         print(f"\nScraping finished. Collected {len(all_election_results)} total election results.")
         return all_election_results
