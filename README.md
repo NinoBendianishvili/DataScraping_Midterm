@@ -41,8 +41,6 @@ python main.py
 - `election_analysis_report.html` - Voting trends and percentages
 - `election_static_maps_report.html` - Color-coded election maps
 
-```
-
 The script will:
 1. Scrape state electoral vote data
 2. Collect historical election results
