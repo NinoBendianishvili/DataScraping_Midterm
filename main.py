@@ -3,13 +3,15 @@ import os
 from typing import List
 from scraper.collector import StateElectionScraper
 from models.data_models import Party, ElectionResult, StateData, YearData
-from utils.file_handler import save_to_csv, save_to_json 
+from utils.file_handler import save_to_csv, save_to_json
+from utils.generator import generate_static_maps_report  # <-- Import the generator function
 
 TARGET_YEARS = [2020, 2016, 2012, 2008, 2004, 2000]
-SCRAPER_DELAY_SECONDS = 0.7 
-OUTPUT_DIR = "output" 
-CSV_FILENAME = "election_results_combined.csv" 
+SCRAPER_DELAY_SECONDS = 0.7
+OUTPUT_DIR = "output"
+CSV_FILENAME = "election_results_combined.csv"
 JSON_FILENAME = "election_results_combined.json"
+HTML_FILENAME = "election_static_maps_report.html"
 
 def run_test_scrape():
     """Runs the scraper, prints test output, and saves results to files."""
@@ -31,11 +33,15 @@ def run_test_scrape():
     print("\n" + "-" * 30)
     print("Saving Results...")
     print("-" * 30)
-    if all_results:
-        save_to_csv(all_results, CSV_FILENAME, OUTPUT_DIR)
-        save_to_json(all_results, JSON_FILENAME, OUTPUT_DIR)
-    else:
-        print("Skipping file saving as no results were collected.")
+
+    save_to_csv(all_results, CSV_FILENAME, OUTPUT_DIR)
+    save_to_json(all_results, JSON_FILENAME, OUTPUT_DIR)
+
+    print("\nGenerating HTML Map Report...")
+    json_path = os.path.join(OUTPUT_DIR, JSON_FILENAME)
+    html_path = os.path.join(OUTPUT_DIR, HTML_FILENAME)
+    generate_static_maps_report(json_path, html_path)
+    print(f"Report generated at: {html_path}")
 
 if __name__ == "__main__":
     start_time = time.time()
@@ -43,4 +49,4 @@ if __name__ == "__main__":
     end_time = time.time()
     print(f"\nTotal execution time: {end_time - start_time:.2f} seconds.")
     print("\nNote:")
-    print(f"- Check the '{OUTPUT_DIR}' directory for '{CSV_FILENAME}' and '{JSON_FILENAME}' output files.")
+    print(f"- Check the '{OUTPUT_DIR}' directory for '{CSV_FILENAME}', '{JSON_FILENAME}', and the HTML map report.")
